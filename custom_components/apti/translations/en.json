@@ -24,7 +24,7 @@
       "init": {
         "title": "APTi options",
         "data": {
-          "scan_interval": "Refresh interval (minutes)"
+          "scan_interval": "Refresh interval (hours)"
         }
       }
     }

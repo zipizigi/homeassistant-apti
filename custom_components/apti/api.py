@@ -8,6 +8,7 @@ from aiohttp import ClientError, ClientResponseError, ClientSession
 from yarl import URL
 
 from .const import API_BASE_URL
+from .version import AppVersionCache
 
 DEFAULT_TIMEOUT_SECONDS = 20
 
@@ -28,6 +29,7 @@ class APTiClient:
         self._account_id = account_id
         self._password = password
         self._mbl_token: str | None = None
+        self._version_cache = AppVersionCache()
 
     @property
     def account_id(self) -> str:
@@ -180,11 +182,18 @@ class APTiClient:
         if auth_required and not self._mbl_token:
             await self.async_login()
 
+        await self._version_cache.async_refresh(self._session)
+
         url = str(URL(API_BASE_URL).with_path(path))
         headers = {
-            "Accept": "application/json",
+            "Accept": "application/json, text/plain, */*",
             "Content-Type": "application/json",
-            "User-Agent": "HomeAssistant-APTi/0.1",
+            "User-Agent": self._version_cache.user_agent,
+            "Accept-Language": "ko-KR,ko;q=0.9",
+            "app-version": self._version_cache.app_version,
+            "adid": "00000000-0000-0000-0000-000000000000",
+            "Origin": "https://azweb.apti.co.kr",
+            "Referer": "https://azweb.apti.co.kr/",
         }
         if auth_required and self._mbl_token:
             headers["mbl-token"] = self._mbl_token

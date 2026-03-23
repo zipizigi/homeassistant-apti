@@ -13,7 +13,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import APTiApiError, APTiAuthError, APTiClient
-from .const import DEFAULT_SCAN_INTERVAL_MINUTES, DOMAIN
+from .const import DEFAULT_SCAN_INTERVAL_HOURS, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -130,11 +130,11 @@ class APTiOptionsFlow(OptionsFlow):
             step_id="init",
             data_schema=vol.Schema({
                 vol.Required(
-                    CONF_SCAN_INTERVAL, 
+                    CONF_SCAN_INTERVAL,
                     default=self._config_entry.options.get(
                         CONF_SCAN_INTERVAL,
-                        DEFAULT_SCAN_INTERVAL_MINUTES,
+                        DEFAULT_SCAN_INTERVAL_HOURS,
                     ),
-                ): vol.All(vol.Coerce(int), vol.Range(min=10, max=120)),
+                ): vol.All(vol.Coerce(int), vol.Range(min=1, max=168)),
             }),
         )

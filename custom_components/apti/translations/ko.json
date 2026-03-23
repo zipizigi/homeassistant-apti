@@ -24,7 +24,7 @@
       "init": {
         "title": "APTi 옵션",
         "data": {
-          "scan_interval": "갱신 주기(분)"
+          "scan_interval": "갱신 주기(시간)"
         }
       }
     }

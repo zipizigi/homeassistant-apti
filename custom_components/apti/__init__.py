@@ -11,7 +11,7 @@ from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import APTiApiError, APTiAuthError, APTiClient
-from .const import DEFAULT_SCAN_INTERVAL_MINUTES, DOMAIN, PLATFORMS
+from .const import DEFAULT_SCAN_INTERVAL_HOURS, DOMAIN, PLATFORMS
 from .coordinator import APTiDataUpdateCoordinator
 
 
@@ -24,15 +24,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         entry.data[CONF_PASSWORD],
     )
 
-    interval_minutes = entry.options.get(
+    interval_hours = entry.options.get(
         CONF_SCAN_INTERVAL,
-        entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL_MINUTES),
+        entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL_HOURS),
     )
     coordinator = APTiDataUpdateCoordinator(
         hass,
         entry,
         client,
-        update_interval=timedelta(minutes=int(interval_minutes)),
+        update_interval=timedelta(hours=int(interval_hours)),
     )
 
     try:
