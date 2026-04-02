@@ -17,7 +17,7 @@ from homeassistant.const import (
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DEFAULT_SCAN_INTERVAL_MINUTES, DOMAIN, PAYMENT_STATE_CODES
+from .const import DEFAULT_SCAN_INTERVAL_HOURS, DOMAIN, PAYMENT_STATE_CODES
 from .coordinator import APTiDataUpdateCoordinator
 from .entity import (
     AptiCoordinatorEntity,
@@ -455,7 +455,7 @@ class AptiStaticSensor(AptiCoordinatorEntity, SensorEntity):
     def native_value(self) -> Any:
         data = dict(self.coordinator.data)
         data["_scan_interval"] = self._config_entry.options.get(
-            CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL_MINUTES
+            CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL_HOURS
         )
         return self.entity_description.value_fn(data)
 
