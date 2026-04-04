@@ -19,12 +19,20 @@
       "already_configured": "이미 추가된 계정입니다."
     }
   },
+  "entity": {
+    "button": {
+      "backfill": {
+        "name": "에너지 과거 데이터 불러오기"
+      }
+    }
+  },
   "options": {
     "step": {
       "init": {
         "title": "APTi 옵션",
         "data": {
-          "scan_interval": "갱신 주기(시간)"
+          "scan_interval": "갱신 주기(시간)",
+          "mbl_token": "모바일 토큰 (다른 기기에서 로그인 후 토큰이 변경된 경우 직접 입력)"
         }
       }
     }

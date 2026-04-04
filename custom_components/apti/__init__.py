@@ -11,7 +11,8 @@ from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import APTiApiError, APTiAuthError, APTiClient
-from .const import CONF_MBL_TOKEN, DEFAULT_SCAN_INTERVAL_HOURS, DOMAIN, PLATFORMS
+from .backfill import async_backfill_energy_statistics
+from .const import CONF_BACKFILL_DONE, CONF_MBL_TOKEN, DEFAULT_SCAN_INTERVAL_HOURS, DOMAIN, PLATFORMS
 from .coordinator import APTiDataUpdateCoordinator
 
 
@@ -63,7 +64,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
+
+    if not entry.data.get(CONF_BACKFILL_DONE):
+        hass.async_create_task(_async_run_first_backfill(hass, entry, client))
+
     return True
+
+
+async def _async_run_first_backfill(
+    hass: HomeAssistant, entry: ConfigEntry, client: APTiClient
+) -> None:
+    """Run energy statistics backfill once on first setup."""
+    success = await async_backfill_energy_statistics(hass, client)
+    if success:
+        hass.config_entries.async_update_entry(
+            entry,
+            data={**entry.data, CONF_BACKFILL_DONE: True},
+        )
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

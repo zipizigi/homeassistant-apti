@@ -19,12 +19,20 @@
       "already_configured": "This account is already configured."
     }
   },
+  "entity": {
+    "button": {
+      "backfill": {
+        "name": "Import energy history"
+      }
+    }
+  },
   "options": {
     "step": {
       "init": {
         "title": "APTi options",
         "data": {
-          "scan_interval": "Refresh interval (hours)"
+          "scan_interval": "Refresh interval (hours)",
+          "mbl_token": "Mobile token (update here if another device login has invalidated your token)"
         }
       }
     }

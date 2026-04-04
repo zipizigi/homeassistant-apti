@@ -87,10 +87,6 @@ class APTiClient:
         """Return current mobile token."""
         return self._mbl_token
 
-    def set_mbl_token(self, token: str) -> None:
-        """Inject a pre-existing token (e.g. loaded from config entry)."""
-        self._mbl_token = token
-
     async def async_ensure_token(self) -> None:
         """Validate cached token via check-token; re-login only when necessary."""
         if self._mbl_token:
@@ -145,10 +141,6 @@ class APTiClient:
             await self._on_token_update(token)
         return payload
 
-    async def async_check_token(self) -> dict[str, Any]:
-        """Validate current session token."""
-        return await self._request("POST", "/api/v2/user/check-token")
-
     async def async_get_user_information_v2(self) -> dict[str, Any]:
         """Fetch user profile (v2)."""
         return await self._request("POST", "/api/v2/user/information")
@@ -164,6 +156,13 @@ class APTiClient:
         """Fetch user detail profile (v3). Returns None when endpoint is unavailable."""
         try:
             return await self._request("GET", "/v3/api/user/information/detail")
+        except APTiApiError:
+            return None
+
+    async def async_get_energy_analysis(self) -> dict[str, Any] | None:
+        """Fetch 13-month energy analysis (historical monthly data)."""
+        try:
+            return await self._request("GET", "/v3/api/management-fee/energy-analysis")
         except APTiApiError:
             return None
 

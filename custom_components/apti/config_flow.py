@@ -126,6 +126,12 @@ class APTiOptionsFlow(OptionsFlow):
     async def async_step_init(self, user_input: dict[str, Any] | None = None):
         """Manage options."""
         if user_input is not None:
+            new_token = user_input.pop(CONF_MBL_TOKEN, "").strip()
+            if new_token:
+                self.hass.config_entries.async_update_entry(
+                    self._config_entry,
+                    data={**self._config_entry.data, CONF_MBL_TOKEN: new_token},
+                )
             return self.async_create_entry(title="", data=user_input)
 
         return self.async_show_form(
@@ -138,5 +144,9 @@ class APTiOptionsFlow(OptionsFlow):
                         DEFAULT_SCAN_INTERVAL_HOURS,
                     ),
                 ): vol.All(vol.Coerce(int), vol.Range(min=1, max=168)),
+                vol.Optional(
+                    CONF_MBL_TOKEN,
+                    default=self._config_entry.data.get(CONF_MBL_TOKEN, ""),
+                ): str,
             }),
         )
