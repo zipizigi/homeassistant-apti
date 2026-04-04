@@ -11,17 +11,27 @@ from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import APTiApiError, APTiAuthError, APTiClient
-from .const import DEFAULT_SCAN_INTERVAL_HOURS, DOMAIN, PLATFORMS
+from .const import CONF_MBL_TOKEN, DEFAULT_SCAN_INTERVAL_HOURS, DOMAIN, PLATFORMS
 from .coordinator import APTiDataUpdateCoordinator
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up APTi from a config entry."""
     session = async_get_clientsession(hass)
+
+    async def _on_token_update(token: str) -> None:
+        """Persist a newly issued mbl_token into the config entry."""
+        hass.config_entries.async_update_entry(
+            entry,
+            data={**entry.data, CONF_MBL_TOKEN: token},
+        )
+
     client = APTiClient(
         session,
         entry.data[CONF_USERNAME],
         entry.data[CONF_PASSWORD],
+        mbl_token=entry.data.get(CONF_MBL_TOKEN) or None,
+        on_token_update=_on_token_update,
     )
 
     interval_hours = entry.options.get(
@@ -67,4 +77,3 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Reload config entry when options are updated."""
     await hass.config_entries.async_reload(entry.entry_id)
-

@@ -13,15 +13,15 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import APTiApiError, APTiAuthError, APTiClient
-from .const import DEFAULT_SCAN_INTERVAL_HOURS, DOMAIN
+from .const import CONF_MBL_TOKEN, DEFAULT_SCAN_INTERVAL_HOURS, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
 
 async def _validate_login(
     hass: HomeAssistant, data: dict[str, Any]
-) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Validate account credentials against APTi API."""
+) -> tuple[dict[str, Any], dict[str, Any], str]:
+    """Validate account credentials against APTi API. Returns (data, info, mbl_token)."""
     client = APTiClient(
         async_get_clientsession(hass),
         data[CONF_USERNAME],
@@ -52,7 +52,8 @@ async def _validate_login(
     if info is None:
         info = {"userId": login_payload.get("userId") or data[CONF_USERNAME]}
 
-    return data, info
+    mbl_token = client.mbl_token or ""
+    return data, info, mbl_token
 
 
 def _build_entry_title(info: dict[str, Any], fallback: str) -> str:
@@ -84,7 +85,7 @@ class APTiConfigFlow(ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             try:
-                data, info = await _validate_login(self.hass, user_input)
+                data, info, mbl_token = await _validate_login(self.hass, user_input)
             except APTiAuthError:
                 errors["base"] = "invalid_auth"
             except APTiApiError as err:
@@ -102,6 +103,7 @@ class APTiConfigFlow(ConfigFlow, domain=DOMAIN):
                     data={
                         CONF_USERNAME: data[CONF_USERNAME],
                         CONF_PASSWORD: data[CONF_PASSWORD],
+                        CONF_MBL_TOKEN: mbl_token,
                     }
                 )
 

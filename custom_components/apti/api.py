@@ -2,15 +2,54 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Callable, Coroutine
 
 from aiohttp import ClientError, ClientResponseError, ClientSession
 from yarl import URL
 
 from .const import API_BASE_URL
-from .version import AppVersionCache
 
 DEFAULT_TIMEOUT_SECONDS = 20
+
+# 실측 기준 앱 버전 및 디바이스 정보 (앱 v3.3.47, iPhone 16, iOS 18.7)
+_APP_VERSION = "3.3.47"
+_IOS_VERSION = "18_7"
+
+# Flutter 네이티브 Dart HTTP 클라이언트 헤더
+# 사용: login, check-token, user/information, sync/*, apt/*, sdi/home/* 등
+_HEADERS_DART: dict[str, str] = {
+    "User-Agent": "Dart/3.8 (dart:io)",
+    "app-version": _APP_VERSION,
+    "adid": "",
+    "adid-idfa": "",
+    "accept-encoding": "gzip",
+}
+
+# WKWebView 헤더 (azweb.apti.co.kr 웹앱에서 호출)
+# 사용: management-fee/*, user/information/detail
+_HEADERS_WEBVIEW: dict[str, str] = {
+    "User-Agent": (
+        f"Mozilla/5.0 (iPhone; CPU iPhone OS {_IOS_VERSION} like Mac OS X) "
+        "AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"
+    ),
+    "app-version": _APP_VERSION,
+    "adid": "00000000-0000-0000-0000-000000000000",
+    "origin": "https://azweb.apti.co.kr",
+    "referer": "https://azweb.apti.co.kr/",
+    "accept": "application/json, text/plain, */*",
+    "accept-language": "ko-KR,ko;q=0.9",
+    "sec-fetch-site": "same-site",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-dest": "empty",
+    "priority": "u=3, i",
+}
+
+# WebView 패턴을 사용하는 경로 prefix
+_WEBVIEW_PATHS = ("/v3/api/management-fee/", "/v3/api/user/information/detail")
+
+
+def _is_webview_path(path: str) -> bool:
+    return any(path.startswith(p) for p in _WEBVIEW_PATHS)
 
 
 class APTiApiError(Exception):
@@ -24,12 +63,19 @@ class APTiAuthError(APTiApiError):
 class APTiClient:
     """Thin async client for the APTi mobile APIs."""
 
-    def __init__(self, session: ClientSession, account_id: str, password: str) -> None:
+    def __init__(
+        self,
+        session: ClientSession,
+        account_id: str,
+        password: str,
+        mbl_token: str | None = None,
+        on_token_update: Callable[[str], Coroutine[Any, Any, None]] | None = None,
+    ) -> None:
         self._session = session
         self._account_id = account_id
         self._password = password
-        self._mbl_token: str | None = None
-        self._version_cache = AppVersionCache()
+        self._mbl_token: str | None = mbl_token
+        self._on_token_update = on_token_update
 
     @property
     def account_id(self) -> str:
@@ -41,35 +87,62 @@ class APTiClient:
         """Return current mobile token."""
         return self._mbl_token
 
+    def set_mbl_token(self, token: str) -> None:
+        """Inject a pre-existing token (e.g. loaded from config entry)."""
+        self._mbl_token = token
+
+    async def async_ensure_token(self) -> None:
+        """Validate cached token via check-token; re-login only when necessary."""
+        if self._mbl_token:
+            try:
+                payload = await self._request(
+                    "POST",
+                    "/api/v2/user/check-token",
+                    auth_required=True,
+                    retry_on_auth=False,
+                )
+                if isinstance(payload, dict) and payload.get("status") == "00":
+                    return
+            except APTiApiError:
+                pass
+        await self.async_login(force=True)
+
     async def async_login(self, *, force: bool = False) -> dict[str, Any]:
         """Authenticate using phone login and cache mbl-token."""
         if self._mbl_token and not force:
             return {"mblToken": self._mbl_token}
 
+        headers = {
+            **_HEADERS_DART,
+            "content-type": "application/json",
+            "push-token": "",
+            "finger-push-token": "",
+        }
         try:
-            payload = await self._request(
-                "POST",
-                "/api/v2/login/phone",
-                auth_required=False,
-                retry_on_auth=False,
-                json_body={
-                    "id": self._account_id,
-                    "password": self._password,
-                    "plainText": self._password,
-                },
-            )
-        except APTiApiError:
+            async with self._session.post(
+                str(URL(API_BASE_URL).with_path("/api/v2/login/phone")),
+                headers=headers,
+                json={"id": self._account_id, "password": self._password},
+                timeout=DEFAULT_TIMEOUT_SECONDS,
+            ) as response:
+                payload = await self._decode_json(response)
+                if response.status >= 400:
+                    message = self._extract_error_message(payload)
+                    raise APTiAuthError(f"{message} (HTTP {response.status})")
+        except APTiAuthError:
             raise
+        except (ClientError, ClientResponseError, TimeoutError) as err:
+            raise APTiApiError(str(err)) from err
 
         token = payload.get("mblToken") or payload.get("mbl_token")
         if not token:
             raise APTiAuthError(
-                payload.get("message")
-                or payload.get("description")
-                or "APTi login failed (missing token)"
+                payload.get("message") or "APTi login failed (missing token)"
             )
 
         self._mbl_token = token
+        if self._on_token_update:
+            await self._on_token_update(token)
         return payload
 
     async def async_check_token(self) -> dict[str, Any]:
@@ -90,7 +163,7 @@ class APTiClient:
     async def async_get_user_information_detail_v3(self) -> dict[str, Any] | None:
         """Fetch user detail profile (v3). Returns None when endpoint is unavailable."""
         try:
-            return await self._request("GET", "/v3/api/users/information/detail")
+            return await self._request("GET", "/v3/api/user/information/detail")
         except APTiApiError:
             return None
 
@@ -168,6 +241,14 @@ class APTiClient:
         except APTiApiError:
             return None
 
+    def _build_headers(self, path: str) -> dict[str, str]:
+        """Return Dart or WebView headers based on API path."""
+        base = _HEADERS_WEBVIEW if _is_webview_path(path) else _HEADERS_DART
+        headers = dict(base)
+        if self._mbl_token:
+            headers["mbl-token"] = self._mbl_token
+        return headers
+
     async def _request(
         self,
         method: str,
@@ -182,21 +263,8 @@ class APTiClient:
         if auth_required and not self._mbl_token:
             await self.async_login()
 
-        await self._version_cache.async_refresh(self._session)
-
         url = str(URL(API_BASE_URL).with_path(path))
-        headers = {
-            "Accept": "application/json, text/plain, */*",
-            "Content-Type": "application/json",
-            "User-Agent": self._version_cache.user_agent,
-            "Accept-Language": "ko-KR,ko;q=0.9",
-            "app-version": self._version_cache.app_version,
-            "adid": "00000000-0000-0000-0000-000000000000",
-            "Origin": "https://azweb.apti.co.kr",
-            "Referer": "https://azweb.apti.co.kr/",
-        }
-        if auth_required and self._mbl_token:
-            headers["mbl-token"] = self._mbl_token
+        headers = self._build_headers(path)
 
         try:
             async with self._session.request(

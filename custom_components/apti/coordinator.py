@@ -41,11 +41,11 @@ class APTiDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def _async_update_data(self) -> dict[str, Any]:
         """Refresh all data required by entities."""
         try:
-            await self._client.async_login()
+            await self._client.async_ensure_token()
         except APTiAuthError as err:
             raise ConfigEntryAuthFailed("APTi authentication failed") from err
         except APTiApiError as err:
-            raise UpdateFailed(f"APTi login request failed: {err}") from err
+            raise UpdateFailed(f"APTi token validation failed: {err}") from err
 
         based_month = dt_util.now().strftime("%Y%m")
 
