@@ -19,13 +19,6 @@
       "already_configured": "This account is already configured."
     }
   },
-  "entity": {
-    "button": {
-      "backfill": {
-        "name": "Import energy history"
-      }
-    }
-  },
   "options": {
     "step": {
       "init": {

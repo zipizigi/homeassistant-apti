@@ -19,13 +19,6 @@
       "already_configured": "이미 추가된 계정입니다."
     }
   },
-  "entity": {
-    "button": {
-      "backfill": {
-        "name": "에너지 과거 데이터 불러오기"
-      }
-    }
-  },
   "options": {
     "step": {
       "init": {

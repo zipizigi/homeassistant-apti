@@ -445,9 +445,9 @@ class AptiStaticSensor(AptiCoordinatorEntity, SensorEntity):
     @property
     def native_value(self) -> Any:
         data = dict(self.coordinator.data)
-        data["_scan_interval"] = self._config_entry.options.get(
-            CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL_HOURS
-        )
+        data["_scan_interval"] = int(
+            self._config_entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL_HOURS)
+        ) * 60
         return self.entity_description.value_fn(data)
 
 
