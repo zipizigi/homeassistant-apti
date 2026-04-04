@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from homeassistant.components.binary_sensor import BinarySensorEntity
+from homeassistant.components.binary_sensor import BinarySensorEntity, BinarySensorEntityDescription
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -31,14 +31,11 @@ def _yn_to_bool(value: Any) -> bool | None:
     return None
 
 
-@dataclass(slots=True)
-class AptiBinarySensorDescription:
+@dataclass
+class AptiBinarySensorDescription(BinarySensorEntityDescription):
     """Definition for binary sensor."""
 
-    key: str
-    name: str
-    value_fn: Callable[[dict[str, Any]], bool | None]
-    icon: str | None = None
+    value_fn: Callable[[dict[str, Any]], bool | None] = lambda _: None
     device_key: str = DEVICE_ACCOUNT
 
 
@@ -154,8 +151,6 @@ class AptiBinarySensor(AptiCoordinatorEntity, BinarySensorEntity):
             device_key=description.device_key,
         )
         self.entity_description = description
-        self._attr_name = description.name
-        self._attr_icon = description.icon
 
     @property
     def is_on(self) -> bool | None:

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Any, Callable
 
-from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
+from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorEntityDescription
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     CONF_SCAN_INTERVAL,
@@ -127,16 +127,11 @@ def _pick_scalar_value(payload: dict[str, Any], keys: tuple[str, ...]) -> Any:
     return None
 
 
-@dataclass(slots=True)
-class AptiSensorDescription:
+@dataclass
+class AptiSensorDescription(SensorEntityDescription):
     """Definition for simple static sensors."""
 
-    key: str
-    name: str
-    value_fn: Callable[[dict[str, Any]], Any]
-    native_unit_of_measurement: str | None = None
-    device_class: SensorDeviceClass | None = None
-    icon: str | None = None
+    value_fn: Callable[[dict[str, Any]], Any] = lambda _: None
     device_key: str = DEVICE_SYSTEM
 
 
@@ -446,10 +441,6 @@ class AptiStaticSensor(AptiCoordinatorEntity, SensorEntity):
             device_key=description.device_key,
         )
         self.entity_description = description
-        self._attr_name = description.name
-        self._attr_icon = description.icon
-        self._attr_native_unit_of_measurement = description.native_unit_of_measurement
-        self._attr_device_class = description.device_class
 
     @property
     def native_value(self) -> Any:
