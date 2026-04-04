@@ -6,7 +6,7 @@ import logging
 from datetime import datetime
 from typing import Any
 
-from homeassistant.components.recorder.models import StatisticData, StatisticMetaData
+from homeassistant.components.recorder.models import StatisticData, StatisticMetaData, StatisticMeanType
 from homeassistant.components.recorder.statistics import async_add_external_statistics
 from homeassistant.const import UnitOfEnergy, UnitOfVolume
 from homeassistant.core import HomeAssistant
@@ -66,7 +66,7 @@ async def async_backfill_energy_statistics(
             continue
 
         metadata = StatisticMetaData(
-            has_mean=False,
+            mean_type=StatisticMeanType.NONE,
             has_sum=True,
             name=name,
             source=DOMAIN,
