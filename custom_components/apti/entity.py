@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
 import re
 
 from homeassistant.config_entries import ConfigEntry
@@ -41,10 +42,16 @@ DEVICE_DESCRIPTORS: dict[str, AptiDeviceDescriptor] = {
 
 
 def slugify(value: str) -> str:
-    """Return stable slug text from free-form string."""
+    """Return stable slug text from free-form string.
+
+    ASCII characters become lowercase slug; non-ASCII-only strings (e.g. Korean)
+    fall back to an 8-char MD5 hex to guarantee uniqueness.
+    """
     cleaned = _RE_NON_WORD.sub("_", value.strip())
     cleaned = cleaned.strip("_").lower()
-    return cleaned or "unknown"
+    if not cleaned:
+        return hashlib.md5(value.encode()).hexdigest()[:8]
+    return cleaned
 
 
 class AptiCoordinatorEntity(CoordinatorEntity[APTiDataUpdateCoordinator]):

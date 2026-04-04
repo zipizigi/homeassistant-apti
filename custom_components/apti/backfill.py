@@ -17,17 +17,17 @@ from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
-# (statistic_id_suffix, chart_key, value_key, unit, name)
+# (statistic_id_suffix, chart_key, value_key, unit, name, unit_class)
 # 외부 통계 ID: apti:{statistic_id_suffix} — 센서 엔티티와 별개로 Recorder에 저장됨
-_ENERGY_STATS: list[tuple[str, str, str, str, str]] = [
-    ("energy_electric_use",  "electric",  "use", UnitOfEnergy.KILO_WATT_HOUR,  "전기 사용량"),
-    ("energy_electric_fee",  "electric",  "fee", "KRW",                         "전기 요금"),
-    ("energy_hotwater_use",  "hotWater",  "use", UnitOfVolume.CUBIC_METERS,     "급탕 사용량"),
-    ("energy_hotwater_fee",  "hotWater",  "fee", "KRW",                         "급탕 요금"),
-    ("energy_water_use",     "water",     "use", UnitOfVolume.CUBIC_METERS,     "수도 사용량"),
-    ("energy_water_fee",     "water",     "fee", "KRW",                         "수도 요금"),
-    ("energy_heat_use",      "heat",      "use", UnitOfVolume.CUBIC_METERS,     "난방 사용량"),
-    ("energy_heat_fee",      "heat",      "fee", "KRW",                         "난방 요금"),
+_ENERGY_STATS: list[tuple[str, str, str, str, str, str | None]] = [
+    ("energy_electric_use",  "electric",  "use", UnitOfEnergy.KILO_WATT_HOUR,  "전기 사용량", "energy"),
+    ("energy_electric_fee",  "electric",  "fee", "KRW",                         "전기 요금",   None),
+    ("energy_hotwater_use",  "hotWater",  "use", UnitOfVolume.CUBIC_METERS,     "급탕 사용량", "volume"),
+    ("energy_hotwater_fee",  "hotWater",  "fee", "KRW",                         "급탕 요금",   None),
+    ("energy_water_use",     "water",     "use", UnitOfVolume.CUBIC_METERS,     "수도 사용량", "volume"),
+    ("energy_water_fee",     "water",     "fee", "KRW",                         "수도 요금",   None),
+    ("energy_heat_use",      "heat",      "use", UnitOfVolume.CUBIC_METERS,     "난방 사용량", "volume"),
+    ("energy_heat_fee",      "heat",      "fee", "KRW",                         "난방 요금",   None),
 ]
 
 
@@ -55,7 +55,7 @@ async def async_backfill_energy_statistics(
     chart_info: dict[str, Any] = data.get("energyChartInfo", {})
     inserted = 0
 
-    for stat_suffix, chart_key, value_key, unit, name in _ENERGY_STATS:
+    for stat_suffix, chart_key, value_key, unit, name, unit_class in _ENERGY_STATS:
         chart: list[dict[str, Any]] = (
             chart_info.get(chart_key, {})
             .get("myHouse", {})
@@ -72,6 +72,7 @@ async def async_backfill_energy_statistics(
             source=DOMAIN,
             statistic_id=f"{DOMAIN}:{stat_suffix}",
             unit_of_measurement=unit,
+            unit_class=unit_class,
         )
 
         stats: list[StatisticData] = []
