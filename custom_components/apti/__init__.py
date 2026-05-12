@@ -28,8 +28,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     client = APTiClient(
         session,
-        entry.data[CONF_USERNAME],
-        entry.data[CONF_PASSWORD],
+        entry.data.get(CONF_USERNAME, ""),
+        entry.data.get(CONF_PASSWORD, ""),
         mbl_token=entry.data.get(CONF_MBL_TOKEN) or None,
         on_token_update=_on_token_update,
     )

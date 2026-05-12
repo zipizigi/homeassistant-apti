@@ -13,6 +13,5 @@ DEFAULT_SCAN_INTERVAL_HOURS = 24
 DEFAULT_SCAN_INTERVAL = timedelta(hours=DEFAULT_SCAN_INTERVAL_HOURS)
 API_BASE_URL = "https://api-main.apti.co.kr"
 PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BINARY_SENSOR]
-PAYMENT_STATE_CODES: tuple[str, ...] = ("001", "002", "003", "004", "005")
 CONF_MBL_TOKEN = "mbl_token"
 

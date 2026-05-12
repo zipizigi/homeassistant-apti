@@ -16,7 +16,6 @@ from .entity import (
     AptiCoordinatorEntity,
     DEVICE_ACCOUNT,
     DEVICE_MANAGEMENT_FEE,
-    DEVICE_PARKING,
 )
 
 
@@ -60,77 +59,6 @@ DESCRIPTIONS: tuple[AptiBinarySensorDescription, ...] = (
         icon="mdi:email-fast",
         device_key=DEVICE_ACCOUNT,
         value_fn=lambda d: _yn_to_bool(d.get("account", {}).get("electronicBill")),
-    ),
-    AptiBinarySensorDescription(
-        key="parking_service_enabled",
-        name="주차 서비스 사용가능",
-        icon="mdi:car-connected",
-        device_key=DEVICE_PARKING,
-        value_fn=lambda d: bool(d.get("parking_visit", {}).get("serviceYn")),
-    ),
-    AptiBinarySensorDescription(
-        key="parking_reservation_enabled",
-        name="주차 예약제 운영",
-        icon="mdi:calendar-clock",
-        device_key=DEVICE_PARKING,
-        value_fn=lambda d: bool(d.get("parking_visit", {}).get("isReservation")),
-    ),
-    AptiBinarySensorDescription(
-        key="parking_is_reservable",
-        name="주차 예약 가능",
-        icon="mdi:car-key",
-        device_key=DEVICE_PARKING,
-        value_fn=lambda d: bool(d.get("parking_visit", {}).get("isReservable")),
-    ),
-    AptiBinarySensorDescription(
-        key="parking_holiday_exception",
-        name="공휴일 예외 적용",
-        icon="mdi:calendar-alert",
-        device_key=DEVICE_PARKING,
-        value_fn=lambda d: _yn_to_bool(
-            d.get("parking_visit", {}).get("exceptions", {}).get("exHolidayUseYn")
-        ),
-    ),
-    AptiBinarySensorDescription(
-        key="parking_saturday_exception",
-        name="토요일 예외 적용",
-        icon="mdi:calendar-weekend",
-        device_key=DEVICE_PARKING,
-        value_fn=lambda d: _yn_to_bool(
-            d.get("parking_visit", {}).get("exceptions", {}).get("exSatUseYn")
-        ),
-    ),
-    AptiBinarySensorDescription(
-        key="parking_sunday_exception",
-        name="일요일 예외 적용",
-        icon="mdi:calendar-weekend-outline",
-        device_key=DEVICE_PARKING,
-        value_fn=lambda d: _yn_to_bool(
-            d.get("parking_visit", {}).get("exceptions", {}).get("exSunUseYn")
-        ),
-    ),
-    AptiBinarySensorDescription(
-        key="parking_operating_apt",
-        name="주차 서비스 운영 단지",
-        icon="mdi:office-building-check",
-        device_key=DEVICE_PARKING,
-        value_fn=lambda d: _yn_to_bool(
-            d.get("parking_application_status", {}).get("isInOperationApt")
-        ),
-    ),
-    AptiBinarySensorDescription(
-        key="parking_applied",
-        name="주차 서비스 신청 완료",
-        icon="mdi:clipboard-check",
-        device_key=DEVICE_PARKING,
-        value_fn=lambda d: _yn_to_bool(d.get("parking_application_status", {}).get("isApplied")),
-    ),
-    AptiBinarySensorDescription(
-        key="parking_active",
-        name="방문차량 주차중",
-        icon="mdi:car",
-        device_key=DEVICE_PARKING,
-        value_fn=lambda d: (d.get("parking_visit", {}).get("parkedTime") or 0) > 0,
     ),
 )
 

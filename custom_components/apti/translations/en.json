@@ -3,20 +3,27 @@
     "step": {
       "user": {
         "title": "Connect APTi account",
-        "description": "Enter your APTi mobile login credentials.",
+        "description": "Paste your APTi mobile token (mbl-token). You need to capture it from the app's network traffic or obtain it another way.",
         "data": {
-          "username": "ID (phone number)",
-          "password": "Password"
+          "mbl_token": "Mobile token"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Refresh APTi token",
+        "description": "Your stored token has expired. Paste a fresh mobile token.",
+        "data": {
+          "mbl_token": "Mobile token"
         }
       }
     },
     "error": {
-      "invalid_auth": "Invalid ID or password.",
+      "invalid_auth": "Token is invalid or expired.",
       "cannot_connect": "Cannot connect to APTi server.",
       "unknown": "Unexpected error occurred."
     },
     "abort": {
-      "already_configured": "This account is already configured."
+      "already_configured": "This account is already configured.",
+      "reauth_successful": "Token refreshed successfully."
     }
   },
   "options": {
@@ -25,10 +32,9 @@
         "title": "APTi options",
         "data": {
           "scan_interval": "Refresh interval (hours)",
-          "mbl_token": "Mobile token (update here if another device login has invalidated your token)"
+          "mbl_token": "Mobile token (update here if the token has changed)"
         }
       }
     }
   }
 }
-

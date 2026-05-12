@@ -17,15 +17,13 @@ from homeassistant.const import (
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DEFAULT_SCAN_INTERVAL_HOURS, DOMAIN, PAYMENT_STATE_CODES
+from .const import DEFAULT_SCAN_INTERVAL_HOURS, DOMAIN
 from .coordinator import APTiDataUpdateCoordinator
 from .entity import (
     AptiCoordinatorEntity,
     DEVICE_ACCOUNT,
     DEVICE_ENERGY,
     DEVICE_MANAGEMENT_FEE,
-    DEVICE_PARKING,
-    DEVICE_PAYMENT,
     DEVICE_SYSTEM,
     slugify,
 )
@@ -69,23 +67,6 @@ def _safe_text(value: Any) -> str | None:
     return text or None
 
 
-def _get_latest_payment_row(data: dict[str, Any]) -> dict[str, Any] | None:
-    histories = data.get("payment_histories", {})
-    rows = histories.get("001", []) if isinstance(histories, dict) else []
-    if not isinstance(rows, list) or not rows:
-        return None
-    candidates = [row for row in rows if isinstance(row, dict)]
-    if not candidates:
-        return None
-    return max(
-        candidates,
-        key=lambda row: (
-            str(row.get("payDate", "")),
-            str(row.get("billYm", "")),
-        ),
-    )
-
-
 def _management_detail_rows(data: dict[str, Any]) -> list[dict[str, Any]]:
     detail = data.get("management_fee", {}).get("detail", [])
     if not isinstance(detail, list):
@@ -98,13 +79,6 @@ def _find_management_detail_item(data: dict[str, Any], item_no: str) -> dict[str
         if str(item.get("itemNo") or "") == item_no:
             return item
     return None
-
-
-def _parking_visit_rows(data: dict[str, Any]) -> list[dict[str, Any]]:
-    cars = data.get("parking_visit", {}).get("carListResDtoList", [])
-    if not isinstance(cars, list):
-        return []
-    return [car for car in cars if isinstance(car, dict)]
 
 
 def _pick_dynamic_value_key(payload: dict[str, Any], preferred: tuple[str, ...]) -> str | None:
@@ -120,86 +94,12 @@ def _pick_dynamic_value_key(payload: dict[str, Any], preferred: tuple[str, ...])
     return None
 
 
-def _pick_scalar_value(payload: dict[str, Any], keys: tuple[str, ...]) -> Any:
-    for key in keys:
-        if payload.get(key) is not None:
-            return payload.get(key)
-    return None
-
-
 @dataclass
 class AptiSensorDescription(SensorEntityDescription):
     """Definition for simple static sensors."""
 
     value_fn: Callable[[dict[str, Any]], Any] = lambda _: None
     device_key: str = DEVICE_SYSTEM
-
-
-@dataclass(frozen=True, slots=True)
-class AptiParkingVisitFieldDescription:
-    """Definition for parking visit detail sensor."""
-
-    key: str
-    name: str
-    source_keys: tuple[str, ...]
-    icon: str | None = None
-    native_unit_of_measurement: str | None = None
-    device_class: SensorDeviceClass | None = None
-
-
-PARKING_VISIT_FIELDS: tuple[AptiParkingVisitFieldDescription, ...] = (
-    AptiParkingVisitFieldDescription(
-        key="car_no",
-        name="차량번호",
-        source_keys=("carNoInformation",),
-        icon="mdi:car-info",
-    ),
-    AptiParkingVisitFieldDescription(
-        key="visit_date",
-        name="방문일",
-        source_keys=("visitDate",),
-        icon="mdi:calendar",
-    ),
-    AptiParkingVisitFieldDescription(
-        key="in_date",
-        name="입차일시",
-        source_keys=("carInDate",),
-        icon="mdi:car-arrow-right",
-    ),
-    AptiParkingVisitFieldDescription(
-        key="out_date",
-        name="출차일시",
-        source_keys=("carOutDate",),
-        icon="mdi:car-arrow-left",
-    ),
-    AptiParkingVisitFieldDescription(
-        key="parked_minutes",
-        name="주차시간",
-        source_keys=("parkedTimeLong", "parkedTime"),
-        icon="mdi:car-clock",
-        native_unit_of_measurement=UnitOfTime.MINUTES,
-    ),
-    AptiParkingVisitFieldDescription(
-        key="discount_minutes",
-        name="할인시간",
-        source_keys=("discountTime",),
-        icon="mdi:ticket-percent",
-        native_unit_of_measurement=UnitOfTime.MINUTES,
-    ),
-    AptiParkingVisitFieldDescription(
-        key="calc_minutes",
-        name="정산시간",
-        source_keys=("calcTime",),
-        icon="mdi:calculator-variant-outline",
-        native_unit_of_measurement=UnitOfTime.MINUTES,
-    ),
-    AptiParkingVisitFieldDescription(
-        key="visit_type",
-        name="방문유형",
-        source_keys=("visitType",),
-        icon="mdi:card-account-details-outline",
-    ),
-)
 
 
 STATIC_SENSORS: tuple[AptiSensorDescription, ...] = (
@@ -224,14 +124,6 @@ STATIC_SENSORS: tuple[AptiSensorDescription, ...] = (
         device_class=SensorDeviceClass.MONETARY,
         device_key=DEVICE_MANAGEMENT_FEE,
         value_fn=lambda d: _safe_int(d.get("manage_home", {}).get("monthFee")),
-    ),
-    AptiSensorDescription(
-        key="mgmt_previous_month_fee",
-        name="전월 관리비",
-        native_unit_of_measurement=CURRENCY_KRW,
-        device_class=SensorDeviceClass.MONETARY,
-        device_key=DEVICE_MANAGEMENT_FEE,
-        value_fn=lambda d: _safe_int(d.get("manage_home", {}).get("bfMonthFee")),
     ),
     AptiSensorDescription(
         key="mgmt_due_fee",
@@ -264,13 +156,7 @@ STATIC_SENSORS: tuple[AptiSensorDescription, ...] = (
         device_class=SensorDeviceClass.DATE,
         device_key=DEVICE_MANAGEMENT_FEE,
         value_fn=lambda d: _parse_yyyymmdd(
-            (
-                d.get("manage_home", {})
-                .get("paymentInformation", [{}])[0]
-                .get("endDate")
-            )
-            if d.get("manage_home", {}).get("paymentInformation")
-            else None
+            _safe_text(d.get("management_fee", {}).get("dueDate"))
         ),
     ),
     AptiSensorDescription(
@@ -310,109 +196,11 @@ STATIC_SENSORS: tuple[AptiSensorDescription, ...] = (
         ),
     ),
     AptiSensorDescription(
-        key="parking_parked_minutes",
-        name="누적 주차시간",
-        native_unit_of_measurement=UnitOfTime.MINUTES,
-        icon="mdi:car-clock",
-        device_key=DEVICE_PARKING,
-        value_fn=lambda d: _safe_int(d.get("parking_visit", {}).get("parkedTime")),
-    ),
-    AptiSensorDescription(
-        key="parking_remaining_minutes",
-        name="무료 잔여시간",
-        native_unit_of_measurement=UnitOfTime.MINUTES,
-        icon="mdi:timer-sand",
-        device_key=DEVICE_PARKING,
-        value_fn=lambda d: _safe_int(d.get("parking_visit", {}).get("remainTime")),
-    ),
-    AptiSensorDescription(
-        key="parking_expected_fee",
-        name="예상 주차요금",
-        native_unit_of_measurement=CURRENCY_KRW,
-        device_class=SensorDeviceClass.MONETARY,
-        device_key=DEVICE_PARKING,
-        value_fn=lambda d: _safe_int(d.get("parking_visit", {}).get("expectedParkingFee")),
-    ),
-    AptiSensorDescription(
-        key="parking_based_minutes",
-        name="주차 기본시간",
-        native_unit_of_measurement=UnitOfTime.MINUTES,
-        icon="mdi:clock-outline",
-        device_key=DEVICE_PARKING,
-        value_fn=lambda d: _safe_int(d.get("parking_visit", {}).get("basedMinutes")),
-    ),
-    AptiSensorDescription(
-        key="parking_based_minutes_fare",
-        name="주차 기본단가",
-        native_unit_of_measurement=CURRENCY_KRW,
-        device_class=SensorDeviceClass.MONETARY,
-        device_key=DEVICE_PARKING,
-        value_fn=lambda d: _safe_int(d.get("parking_visit", {}).get("basedMinutesFare")),
-    ),
-    AptiSensorDescription(
-        key="parking_visit_vehicle_count",
-        name="방문차량 건수",
-        icon="mdi:car-multiple",
-        device_key=DEVICE_PARKING,
-        value_fn=lambda d: len(_parking_visit_rows(d)),
-    ),
-    AptiSensorDescription(
-        key="payment_history_latest_bill_month",
-        name="최근 납부월",
-        icon="mdi:calendar-check",
-        device_key=DEVICE_PAYMENT,
-        value_fn=lambda d: _safe_text((_get_latest_payment_row(d) or {}).get("billYm")),
-    ),
-    AptiSensorDescription(
-        key="payment_history_latest_paid_date",
-        name="최근 납부일",
-        device_class=SensorDeviceClass.DATE,
-        device_key=DEVICE_PAYMENT,
-        value_fn=lambda d: _parse_yyyymmdd((_get_latest_payment_row(d) or {}).get("payDate")),
-    ),
-    AptiSensorDescription(
-        key="payment_history_latest_paid_amount",
-        name="최근 납부금액",
-        native_unit_of_measurement=CURRENCY_KRW,
-        device_class=SensorDeviceClass.MONETARY,
-        device_key=DEVICE_PAYMENT,
-        value_fn=lambda d: _safe_int((_get_latest_payment_row(d) or {}).get("amt")),
-    ),
-    AptiSensorDescription(
-        key="payment_next_bill_month",
-        name="다음 청구월",
-        icon="mdi:calendar-arrow-right",
-        device_key=DEVICE_PAYMENT,
-        value_fn=lambda d: _safe_text(d.get("manage_payment_next", {}).get("nextBillYm")),
-    ),
-    AptiSensorDescription(
-        key="payment_my_cash",
-        name="보유 캐시",
-        native_unit_of_measurement=CURRENCY_KRW,
-        device_class=SensorDeviceClass.MONETARY,
-        device_key=DEVICE_PAYMENT,
-        value_fn=lambda d: _safe_int(d.get("manage_payment_next", {}).get("myCash")),
-    ),
-    AptiSensorDescription(
-        key="payment_coupon_count",
-        name="보유 쿠폰수",
-        icon="mdi:ticket-percent",
-        device_key=DEVICE_PAYMENT,
-        value_fn=lambda d: _safe_int(d.get("manage_payment_next", {}).get("couponCnt")),
-    ),
-    AptiSensorDescription(
         key="autodiscount_honey",
-        name="꿀단지 할인 사용",
+        name="자동할인 사용",
         icon="mdi:honey-outline",
         device_key=DEVICE_MANAGEMENT_FEE,
         value_fn=lambda d: _safe_text(d.get("manage_auto_discount", {}).get("honeyYn")),
-    ),
-    AptiSensorDescription(
-        key="autodiscount_schedule_month",
-        name="자동할인 예정월",
-        icon="mdi:calendar-star",
-        device_key=DEVICE_MANAGEMENT_FEE,
-        value_fn=lambda d: _safe_text(d.get("manage_auto_discount", {}).get("schBillYm")),
     ),
     AptiSensorDescription(
         key="refresh_interval_minutes",
@@ -701,135 +489,26 @@ class AptiDiscountSensor(AptiCoordinatorEntity, SensorEntity):
         return self._find_amount()
 
 
-class AptiPaymentStateSensor(AptiCoordinatorEntity, SensorEntity):
-    """Sensors per payment history state code."""
+_ENERGY_CATEGORY_LABELS = {
+    "electric": "전기",
+    "water": "수도",
+    "heat": "난방",
+    "hotwater": "급탕",
+}
 
-    def __init__(
-        self,
-        coordinator: APTiDataUpdateCoordinator,
-        config_entry: ConfigEntry,
-        state_code: str,
-        metric: str,
-    ) -> None:
-        super().__init__(
-            coordinator,
-            config_entry,
-            f"payment_state_{state_code}_{metric}",
-            device_key=DEVICE_PAYMENT,
-        )
-        self._state_code = state_code
-        self._metric = metric
-
-        if metric == "count":
-            self._attr_name = f"납부이력 {state_code} 건수"
-            self._attr_icon = "mdi:counter"
-        elif metric == "amount":
-            self._attr_name = f"납부이력 {state_code} 금액"
-            self._attr_icon = "mdi:cash-multiple"
-            self._attr_device_class = SensorDeviceClass.MONETARY
-            self._attr_native_unit_of_measurement = CURRENCY_KRW
-        elif metric == "state_name":
-            self._attr_name = f"납부이력 {state_code} 상태명"
-            self._attr_icon = "mdi:label-outline"
-        elif metric == "latest_bill_month":
-            self._attr_name = f"납부이력 {state_code} 최근 청구월"
-            self._attr_icon = "mdi:calendar-month"
-        else:
-            self._attr_name = f"납부이력 {state_code} 최근 납부일"
-            self._attr_icon = "mdi:calendar-check"
-            self._attr_device_class = SensorDeviceClass.DATE
-
-    def _rows(self) -> list[dict[str, Any]]:
-        rows = self.coordinator.data.get("payment_histories", {}).get(self._state_code, [])
-        if not isinstance(rows, list):
-            return []
-        return [row for row in rows if isinstance(row, dict)]
-
-    def _latest(self) -> dict[str, Any] | None:
-        rows = self._rows()
-        if not rows:
-            return None
-        return max(
-            rows,
-            key=lambda row: (
-                str(row.get("payDate", "")),
-                str(row.get("billYm", "")),
-            ),
-        )
-
-    @property
-    def native_value(self) -> int | str | date | None:
-        rows = self._rows()
-
-        if self._metric == "count":
-            return len(rows)
-        if self._metric == "amount":
-            return sum(_safe_int(row.get("amt")) or 0 for row in rows)
-
-        latest = self._latest()
-        if not latest:
-            return None
-
-        if self._metric == "state_name":
-            return _safe_text(latest.get("stateName"))
-        if self._metric == "latest_bill_month":
-            return _safe_text(latest.get("billYm"))
-        return _parse_yyyymmdd(_safe_text(latest.get("payDate")))
-
-
-class AptiParkingVisitDetailSensor(AptiCoordinatorEntity, SensorEntity):
-    """Expose parking visit detail fields as standalone entities."""
-
-    def __init__(
-        self,
-        coordinator: APTiDataUpdateCoordinator,
-        config_entry: ConfigEntry,
-        visit_index: int,
-        visit_key: str,
-        field: AptiParkingVisitFieldDescription,
-    ) -> None:
-        super().__init__(
-            coordinator,
-            config_entry,
-            f"parking_visit_{visit_index}_{slugify(visit_key)}_{field.key}",
-            device_key=DEVICE_PARKING,
-        )
-        self._visit_index = visit_index
-        self._field = field
-
-        self._attr_name = f"방문차량 {visit_index} {field.name}"
-        self._attr_icon = field.icon
-        self._attr_native_unit_of_measurement = field.native_unit_of_measurement
-        self._attr_device_class = field.device_class
-
-    def _visit(self) -> dict[str, Any] | None:
-        rows = _parking_visit_rows(self.coordinator.data)
-        index = self._visit_index - 1
-        if index < 0 or index >= len(rows):
-            return None
-        return rows[index]
-
-    @property
-    def native_value(self) -> int | str | date | None:
-        row = self._visit()
-        if not row:
-            return None
-
-        value = _pick_scalar_value(row, self._field.source_keys)
-        if value is None:
-            return None
-
-        if self._field.device_class == SensorDeviceClass.DATE:
-            return _parse_yyyymmdd(_safe_text(value))
-
-        if self._field.native_unit_of_measurement == UnitOfTime.MINUTES:
-            return _safe_int(value)
-
-        return _safe_text(value)
+_ENERGY_METRIC_SPEC: dict[str, tuple[str, str, str]] = {
+    # metric -> (response_key, korean_label, icon)
+    "fee": ("fee", "요금", "mdi:cash"),
+    "use": ("use", "사용량", "mdi:gauge"),
+    "previous_use": ("previousUse", "전월 사용량", "mdi:history"),
+    "last_year_use": ("lastYearUse", "전년 동월 사용량", "mdi:calendar-range"),
+    "current_needle": ("currentNeedle", "당월 검침", "mdi:counter"),
+    "previous_needle": ("previousNeedle", "전월 검침", "mdi:counter"),
+}
 
 
 class AptiEnergySensor(AptiCoordinatorEntity, SensorEntity):
-    """Fee/usage sensor for a single energy category."""
+    """Fee/usage/reading sensor for a single energy category."""
 
     def __init__(
         self,
@@ -846,20 +525,15 @@ class AptiEnergySensor(AptiCoordinatorEntity, SensorEntity):
         )
         self._energy_key = energy_key
         self._metric = metric
-        labels = {
-            "electric": "전기",
-            "water": "수도",
-            "heat": "난방",
-            "hotwater": "급탕",
-        }
-        metric_label = "요금" if metric == "fee" else "사용량"
-        self._attr_name = f"{labels.get(energy_key, energy_key)} {metric_label}"
+        response_key, metric_label, icon = _ENERGY_METRIC_SPEC[metric]
+        self._response_key = response_key
+        self._attr_name = (
+            f"{_ENERGY_CATEGORY_LABELS.get(energy_key, energy_key)} {metric_label}"
+        )
+        self._attr_icon = icon
         if metric == "fee":
             self._attr_device_class = SensorDeviceClass.MONETARY
             self._attr_native_unit_of_measurement = CURRENCY_KRW
-            self._attr_icon = "mdi:cash"
-        else:
-            self._attr_icon = "mdi:gauge"
 
     def _energy_obj(self) -> dict[str, Any] | None:
         energy = self.coordinator.data.get("manage_energy", {}).get("energy", {})
@@ -884,7 +558,7 @@ class AptiEnergySensor(AptiCoordinatorEntity, SensorEntity):
         item = self._energy_obj()
         if not item:
             return None
-        value = item.get(self._metric)
+        value = item.get(self._response_key)
         if self._metric == "fee":
             return _safe_int(value)
         return _safe_float(value)
@@ -903,22 +577,11 @@ async def async_setup_entry(
         AptiStaticSensor(coordinator, config_entry, description) for description in STATIC_SENSORS
     )
 
-    for state_code in PAYMENT_STATE_CODES:
-        entities.append(AptiPaymentStateSensor(coordinator, config_entry, state_code, "count"))
-        entities.append(AptiPaymentStateSensor(coordinator, config_entry, state_code, "amount"))
-        entities.append(
-            AptiPaymentStateSensor(coordinator, config_entry, state_code, "state_name")
-        )
-        entities.append(
-            AptiPaymentStateSensor(coordinator, config_entry, state_code, "latest_bill_month")
-        )
-        entities.append(
-            AptiPaymentStateSensor(coordinator, config_entry, state_code, "latest_paid_date")
-        )
-
     for energy_key in ("electric", "water", "heat", "hotwater"):
-        entities.append(AptiEnergySensor(coordinator, config_entry, energy_key, "fee"))
-        entities.append(AptiEnergySensor(coordinator, config_entry, energy_key, "use"))
+        for metric in _ENERGY_METRIC_SPEC:
+            entities.append(
+                AptiEnergySensor(coordinator, config_entry, energy_key, metric)
+            )
 
     detail_items = _management_detail_rows(coordinator.data)
     for item in detail_items:
@@ -1004,18 +667,5 @@ async def async_setup_entry(
                                 str(child["title"]),
                             )
                         )
-
-    for visit_index, row in enumerate(_parking_visit_rows(coordinator.data), start=1):
-        visit_key = _safe_text(row.get("carNoInformation")) or f"visit_{visit_index}"
-        for field in PARKING_VISIT_FIELDS:
-            entities.append(
-                AptiParkingVisitDetailSensor(
-                    coordinator,
-                    config_entry,
-                    visit_index,
-                    visit_key,
-                    field,
-                )
-            )
 
     async_add_entities(entities)

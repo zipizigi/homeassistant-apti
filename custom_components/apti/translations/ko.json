@@ -3,20 +3,27 @@
     "step": {
       "user": {
         "title": "APTi 계정 연결",
-        "description": "아파트아이 앱 로그인 정보를 입력하세요.",
+        "description": "아파트아이 모바일 토큰(mbl-token)을 입력하세요. 앱 트래픽을 캡처하거나 다른 방법으로 토큰을 확보해야 합니다.",
         "data": {
-          "username": "아이디(휴대폰번호)",
-          "password": "비밀번호"
+          "mbl_token": "모바일 토큰"
+        }
+      },
+      "reauth_confirm": {
+        "title": "APTi 토큰 갱신",
+        "description": "기존 토큰이 만료되었습니다. 새 모바일 토큰을 붙여넣으세요.",
+        "data": {
+          "mbl_token": "모바일 토큰"
         }
       }
     },
     "error": {
-      "invalid_auth": "아이디 또는 비밀번호가 올바르지 않습니다.",
+      "invalid_auth": "토큰이 유효하지 않거나 만료되었습니다.",
       "cannot_connect": "아파트아이 서버에 연결할 수 없습니다.",
       "unknown": "알 수 없는 오류가 발생했습니다."
     },
     "abort": {
-      "already_configured": "이미 추가된 계정입니다."
+      "already_configured": "이미 추가된 계정입니다.",
+      "reauth_successful": "토큰이 갱신되었습니다."
     }
   },
   "options": {
@@ -25,10 +32,9 @@
         "title": "APTi 옵션",
         "data": {
           "scan_interval": "갱신 주기(시간)",
-          "mbl_token": "모바일 토큰 (다른 기기에서 로그인 후 토큰이 변경된 경우 직접 입력)"
+          "mbl_token": "모바일 토큰 (토큰이 변경된 경우 직접 입력)"
         }
       }
     }
   }
 }
-

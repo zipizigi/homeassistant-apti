@@ -17,8 +17,6 @@ _RE_NON_WORD = re.compile(r"[^0-9a-zA-Z_]+")
 
 DEVICE_ACCOUNT = "account"
 DEVICE_MANAGEMENT_FEE = "management_fee"
-DEVICE_PARKING = "parking"
-DEVICE_PAYMENT = "payment"
 DEVICE_ENERGY = "energy"
 DEVICE_SYSTEM = "system"
 
@@ -34,8 +32,6 @@ class AptiDeviceDescriptor:
 DEVICE_DESCRIPTORS: dict[str, AptiDeviceDescriptor] = {
     DEVICE_ACCOUNT: AptiDeviceDescriptor(name="계정", model="Account"),
     DEVICE_MANAGEMENT_FEE: AptiDeviceDescriptor(name="관리비", model="Management Fee"),
-    DEVICE_PARKING: AptiDeviceDescriptor(name="주차", model="Parking"),
-    DEVICE_PAYMENT: AptiDeviceDescriptor(name="납부", model="Payment"),
     DEVICE_ENERGY: AptiDeviceDescriptor(name="에너지", model="Energy"),
     DEVICE_SYSTEM: AptiDeviceDescriptor(name="시스템", model="System"),
 }

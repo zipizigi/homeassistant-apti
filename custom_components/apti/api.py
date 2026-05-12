@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import random
 from typing import Any, Callable, Coroutine
 
 from aiohttp import ClientError, ClientResponseError, ClientSession
@@ -11,14 +13,19 @@ from .const import API_BASE_URL
 
 DEFAULT_TIMEOUT_SECONDS = 20
 
-# 실측 기준 앱 버전 및 디바이스 정보 (앱 v3.3.47, iPhone 16, iOS 18.7)
-_APP_VERSION = "3.3.47"
+# Random pre-request delay to scatter burst traffic and avoid looking like a
+# tight-loop bot. Applied to every authenticated request.
+_REQUEST_DELAY_MIN_SECONDS = 0.05
+_REQUEST_DELAY_MAX_SECONDS = 1.0
+
+# 실측 기준 앱 버전 및 디바이스 정보 (앱 v3.3.49, iPhone 16, iOS 18.7)
+_APP_VERSION = "3.3.49"
 _IOS_VERSION = "18_7"
 
 # Flutter 네이티브 Dart HTTP 클라이언트 헤더
 # 사용: login, check-token, user/information, sync/*, apt/*, sdi/home/* 등
 _HEADERS_DART: dict[str, str] = {
-    "User-Agent": "Dart/3.8 (dart:io)",
+    "User-Agent": "Dart/3.11 (dart:io)",
     "app-version": _APP_VERSION,
     "adid": "",
     "adid-idfa": "",
@@ -42,6 +49,7 @@ _HEADERS_WEBVIEW: dict[str, str] = {
     "sec-fetch-mode": "cors",
     "sec-fetch-dest": "empty",
     "priority": "u=3, i",
+    "accept-encoding": "gzip, deflate, br, zstd",
 }
 
 # WebView 패턴을 사용하는 경로 prefix
@@ -88,23 +96,21 @@ class APTiClient:
         return self._mbl_token
 
     async def async_ensure_token(self) -> None:
-        """Validate cached token via check-token; re-login only when necessary."""
-        if self._mbl_token:
-            try:
-                payload = await self._request(
-                    "POST",
-                    "/api/v2/user/check-token",
-                    auth_required=True,
-                    retry_on_auth=False,
-                )
-                if isinstance(payload, dict) and payload.get("status") == "00":
-                    return
-            except APTiApiError:
-                pass
-        await self.async_login(force=True)
+        """Verify that a mobile token is configured. Token validity is checked
+        lazily on the first real request — any 401/expired response raises
+        APTiAuthError, which surfaces as a re-auth request to the user."""
+        if not self._mbl_token:
+            raise APTiAuthError(
+                "APTi mobile token is not configured; provide a fresh token"
+            )
 
     async def async_login(self, *, force: bool = False) -> dict[str, Any]:
-        """Authenticate using phone login and cache mbl-token."""
+        """Authenticate using phone login and cache mbl-token.
+
+        NOTE: Auto-invocation has been disabled — the integration now operates
+        in token-only mode. This method is kept so it can still be called
+        directly (e.g. from a manual debugging script or a future re-enable),
+        but the request pipeline no longer triggers it on auth failures."""
         if self._mbl_token and not force:
             return {"mblToken": self._mbl_token}
 
@@ -141,21 +147,64 @@ class APTiClient:
             await self._on_token_update(token)
         return payload
 
-    async def async_get_user_information_v2(self) -> dict[str, Any]:
-        """Fetch user profile (v2)."""
-        return await self._request("POST", "/api/v2/user/information")
-
-    async def async_get_user_information_v3(self) -> dict[str, Any] | None:
-        """Fetch user profile (v3). Returns None when endpoint is unavailable."""
-        try:
-            return await self._request("GET", "/v3/api/users/information")
-        except APTiApiError:
-            return None
-
     async def async_get_user_information_detail_v3(self) -> dict[str, Any] | None:
         """Fetch user detail profile (v3). Returns None when endpoint is unavailable."""
         try:
             return await self._request("GET", "/v3/api/user/information/detail")
+        except APTiApiError:
+            return None
+
+    async def async_get_user_information2(self) -> dict[str, Any] | None:
+        """Fetch user auto-discount / auto-pay flags (v3).
+
+        Replaces parts of v2 /api/v2/manage/auto-discount: exposes
+        autoDiscountStatus, monthlyRentAutoStatus, naverPayDiscountStatus.
+        """
+        try:
+            return await self._request("GET", "/v3/api/user/information2")
+        except APTiApiError:
+            return None
+
+    async def async_get_apt_information(self) -> dict[str, Any] | None:
+        """Fetch apartment metadata (v3). Provides aptName, address, menuCode."""
+        try:
+            return await self._request("GET", "/v3/api/apt/information")
+        except APTiApiError:
+            return None
+
+    async def async_get_management_fee_main(self) -> dict[str, Any] | None:
+        """Fetch management-fee main summary (v3 replacement for v2 manage/home)."""
+        try:
+            return await self._request("GET", "/v3/api/management-fee/main")
+        except APTiApiError:
+            return None
+
+    async def async_get_management_fee_energy(self) -> dict[str, Any] | None:
+        """Fetch energy summary (v3 replacement for v2 manage/energy)."""
+        try:
+            return await self._request("GET", "/v3/api/management-fee/energy")
+        except APTiApiError:
+            return None
+
+    async def async_get_management_fee_energy_use(self) -> dict[str, Any] | None:
+        """Fetch meter readings + previous/year-ago usage per category (v3).
+
+        Provides currentNeedle, previousNeedle, currentUse, previousUse,
+        lastYearUse, unit per electric/water/heat/hotwater category.
+        """
+        try:
+            return await self._request("GET", "/v3/api/management-fee/energy-use")
+        except APTiApiError:
+            return None
+
+    async def async_get_management_fee_analysis(self) -> dict[str, Any] | None:
+        """Fetch management-fee analysis (v3).
+
+        Provides energyCondition (area, myFee, avgFee, compAvg) — used to
+        restore the v2 manage_home.area and energyCondition.* sensors.
+        """
+        try:
+            return await self._request("GET", "/v3/api/management-fee/analysis")
         except APTiApiError:
             return None
 
@@ -166,13 +215,6 @@ class APTiClient:
         except APTiApiError:
             return None
 
-    async def async_get_manage_home(self, bill_ym: str | None = None) -> dict[str, Any]:
-        """Fetch management home summary."""
-        path = "/api/v2/manage/home"
-        if bill_ym:
-            path = f"{path}/{bill_ym}"
-        return await self._request("GET", path)
-
     async def async_get_management_fee_history(
         self, bill_ym: str | None = None
     ) -> dict[str, Any]:
@@ -182,63 +224,6 @@ class APTiClient:
             path = f"{path}/{bill_ym}"
         return await self._request("GET", path)
 
-    async def async_get_management_payment_history(
-        self, state_code: str
-    ) -> list[dict[str, Any]]:
-        """Fetch payment history by state code."""
-        data = await self._request("GET", f"/v3/api/management-fee/payment/{state_code}")
-        if isinstance(data, list):
-            return [row for row in data if isinstance(row, dict)]
-        return []
-
-    async def async_get_manage_payment_next(self) -> dict[str, Any] | None:
-        """Fetch next payment info."""
-        try:
-            return await self._request("GET", "/api/v2/manage/payment-next")
-        except APTiApiError:
-            return None
-
-    async def async_get_manage_auto_discount(self) -> dict[str, Any] | None:
-        """Fetch auto discount info."""
-        try:
-            return await self._request("GET", "/api/v2/manage/auto-discount")
-        except APTiApiError:
-            return None
-
-    async def async_get_manage_energy(self) -> dict[str, Any] | None:
-        """Fetch energy summary."""
-        try:
-            return await self._request("GET", "/api/v2/manage/energy")
-        except APTiApiError:
-            return None
-
-    async def async_get_parking_visit(self, based_month: str) -> dict[str, Any] | None:
-        """Fetch parking visit and reservation info."""
-        try:
-            return await self._request(
-                "GET",
-                "/api/parking/v2/visit",
-                params={"basedMonth": based_month},
-            )
-        except APTiApiError:
-            return None
-
-    async def async_get_parking_favorites(self) -> list[dict[str, Any]] | None:
-        """Fetch parking favorites."""
-        try:
-            data = await self._request("POST", "/api/parking/v2/favorites", json_body={})
-        except APTiApiError:
-            return None
-        if isinstance(data, list):
-            return [row for row in data if isinstance(row, dict)]
-        return None
-
-    async def async_get_parking_application_status(self) -> dict[str, Any] | None:
-        """Fetch parking application status."""
-        try:
-            return await self._request("POST", "/api/parking/v2/application/status")
-        except APTiApiError:
-            return None
 
     def _build_headers(self, path: str) -> dict[str, str]:
         """Return Dart or WebView headers based on API path."""
@@ -256,11 +241,15 @@ class APTiClient:
         params: dict[str, Any] | None = None,
         json_body: dict[str, Any] | None = None,
         auth_required: bool = True,
-        retry_on_auth: bool = True,
     ) -> dict[str, Any] | list[Any]:
-        """Execute an API request with optional one-time auth retry."""
+        """Execute an API request. Auth failures raise APTiAuthError so the
+        integration can prompt for a fresh mbl-token (no automatic re-login)."""
         if auth_required and not self._mbl_token:
-            await self.async_login()
+            raise APTiAuthError("APTi mobile token is not configured")
+
+        await asyncio.sleep(
+            random.uniform(_REQUEST_DELAY_MIN_SECONDS, _REQUEST_DELAY_MAX_SECONDS)
+        )
 
         url = str(URL(API_BASE_URL).with_path(path))
         headers = self._build_headers(path)
@@ -276,23 +265,18 @@ class APTiClient:
             ) as response:
                 payload = await self._decode_json(response)
 
-                if auth_required and retry_on_auth and self._is_auth_failure(response.status, payload):
-                    await self.async_login(force=True)
-                    return await self._request(
-                        method,
-                        path,
-                        params=params,
-                        json_body=json_body,
-                        auth_required=auth_required,
-                        retry_on_auth=False,
-                    )
-
                 if response.status >= 400:
                     message = self._extract_error_message(payload)
                     detail = f"{message} (HTTP {response.status} {path})"
+                    if auth_required and self._is_auth_failure(response.status, payload):
+                        raise APTiAuthError(detail)
                     if response.status in (401, 403):
                         raise APTiAuthError(detail)
                     raise APTiApiError(detail)
+
+                if auth_required and self._is_auth_failure(response.status, payload):
+                    message = self._extract_error_message(payload)
+                    raise APTiAuthError(f"{message} ({path})")
 
                 return payload
         except APTiAuthError:
